@@ -56,7 +56,7 @@ func main() {
 			trimmedPath = strings.TrimPrefix(trimmedPath, "https://")
 			trimmedPath = strings.TrimPrefix(trimmedPath, "https:/")
 			trimmedPath = strings.TrimPrefix(trimmedPath, "www.")
-
+			trimmedPath = strings.TrimSuffix(trimmedPath, "/")
 			fmt.Printf("check path luc sau: %s\n", trimmedPath)
 
 			// Cập nhật request với path mới
