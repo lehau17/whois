@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/lissy93/who-dat/api"
 	"github.com/lissy93/who-dat/lib"
+	shlin "github.com/shlin168/go-whois/whois"
 )
 
 //go:embed dist/*
@@ -66,6 +69,68 @@ func main() {
 
 			lib.AuthMiddleware(api.MainHandler).ServeHTTP(w, r)
 		}
+	})
+	http.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Check API called")
+
+		// Lấy giá trị query param "domain"
+		domain := r.URL.Query().Get("domain")
+		if domain == "" {
+			http.Error(w, `{"error": "Missing domain parameter"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Loại bỏ tiền tố http://, https://, www.
+		domain = strings.TrimPrefix(domain, "http://")
+		domain = strings.TrimPrefix(domain, "https://")
+		domain = strings.TrimPrefix(domain, "www.")
+		domain = strings.TrimSuffix(domain, "/")
+
+		// Kiểm tra nếu domain vẫn không hợp lệ (không chứa dấu chấm)
+		if !strings.Contains(domain, ".") {
+			http.Error(w, `{"error": "Invalid domain name"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Tạo WHOIS client
+		ctx := context.Background()
+		client, err := shlin.NewClient()
+		if err != nil {
+			http.Error(w, `{"error": "Failed to create WHOIS client"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Truy vấn WHOIS
+		whoisDomain, err := client.Query(ctx, domain)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "Failed to query WHOIS: %v"}`, err), http.StatusInternalServerError)
+			return
+		}
+		var contacts interface{}
+		var abuseEmail string
+		if whoisDomain.ParsedWhois != nil {
+			if whoisDomain.ParsedWhois.Contacts != nil {
+				if whoisDomain.ParsedWhois.Contacts.Registrant != nil {
+					contacts = whoisDomain.ParsedWhois.Contacts.Registrant.Email
+				}
+			}
+			if whoisDomain.ParsedWhois.Registrar != nil {
+				abuseEmail = whoisDomain.ParsedWhois.Registrar.AbuseContactEmail
+			}
+		}
+
+		// Định dạng dữ liệu trả về
+		response := map[string]any{
+			"domain":       domain,
+			"whois_server": whoisDomain.WhoisServer,
+			"contacts":     contacts,
+			"abuse_email":  abuseEmail,
+			"is_available": whoisDomain.IsAvailable,
+		}
+
+		// Trả về JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 	})
 
 	// Choose the port to start server on

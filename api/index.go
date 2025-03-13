@@ -50,6 +50,7 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	whois, err := lib.GetWhois(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+
 		return
 	}
 
